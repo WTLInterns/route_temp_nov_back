@@ -1315,6 +1315,148 @@ const completeTrip = async (req, res) => {
   }
 };
 
+// Update booking details (customer, pickup/drop, timing, fares, etc.). Optionally allow driver/cab change if provided.
+const updateAssignmentDetails = async (req, res) => {
+  try {
+    const admin = req.admin;
+    const id = req.params.id;
+    const body = req.body || {};
+
+    const assignment = await CabAssignment.findByPk(id);
+    if (!assignment) return res.status(404).json({ message: "Cab assignment not found" });
+
+    if (assignment.assignedBy !== admin.id && admin.role !== 'superadmin') {
+      return res.status(403).json({ message: 'Unauthorized: You can only modify bookings you created' });
+    }
+
+    // Whitelist of fields that can be updated from the create flow
+    const updatable = [
+      'customerName','customerPhone','pickupLocation','pickupCity','pickupState','pickupLatitude','pickupLongitude',
+      'dropLocation','dropCity','dropState','dropLatitude','dropLongitude','estimatedDistance','estimatedFare','duration',
+      'scheduledPickupTime','vehicleType','tripType','specialInstructions','paymentMode','adminNotes','totalDistance',
+      'actualPickupTime','dropTime','cashCollected','fastTagAmount','otherAmount','otherDetails'
+    ];
+
+    for (const key of updatable) {
+      if (Object.prototype.hasOwnProperty.call(body, key)) {
+        assignment[key] = body[key];
+      }
+    }
+
+    // Optionally allow driver/cab change here too (not required – reassign endpoint preferred)
+    if (body.driverId !== undefined) {
+      const driverIdNum = Number(body.driverId);
+      if (!Number.isInteger(driverIdNum)) return res.status(400).json({ message: 'Invalid driverId' });
+      assignment.driverId = driverIdNum;
+    }
+    if (body.cabNumber !== undefined || body.cabId !== undefined) {
+      let cab = null;
+      if (body.cabId !== undefined) {
+        const cabIdNum = Number(body.cabId);
+        if (!Number.isInteger(cabIdNum)) return res.status(400).json({ message: 'Invalid cabId' });
+        cab = await CabsDetails.findByPk(cabIdNum);
+      }
+      if (!cab && body.cabNumber) {
+        const maybeNum = Number(body.cabNumber);
+        if (Number.isInteger(maybeNum)) {
+          cab = await CabsDetails.findByPk(maybeNum);
+        }
+        if (!cab) cab = await CabsDetails.findOne({ where: { cabNumber: body.cabNumber } });
+      }
+      if (!cab) return res.status(404).json({ message: 'Cab not found for given cabNumber/id' });
+      assignment.cabId = cab.id;
+    }
+
+    await assignment.save();
+
+    const updated = await CabAssignment.findByPk(assignment.id, {
+      include: [{ model: Driver }, { model: CabsDetails }]
+    });
+
+    return res.status(200).json({ message: 'Booking updated successfully', assignment: updated });
+  } catch (error) {
+    console.error('Error in updateAssignmentDetails:', error);
+    return res.status(500).json({ message: 'Server Error', error: error.message });
+  }
+};
+
+// Delete a single booking by id
+const deleteAssignment = async (req, res) => {
+  try {
+    const admin = req.admin;
+    const id = req.params.id;
+
+    const assignment = await CabAssignment.findByPk(id);
+    if (!assignment) return res.status(404).json({ message: 'Cab assignment not found' });
+
+    if (assignment.assignedBy !== admin.id && admin.role !== 'superadmin') {
+      return res.status(403).json({ message: 'Unauthorized: You can only delete bookings you created' });
+    }
+
+    await assignment.destroy();
+    return res.status(200).json({ message: 'Booking deleted successfully' });
+  } catch (error) {
+    console.error('Error in deleteAssignment:', error);
+    return res.status(500).json({ message: 'Server Error', error: error.message });
+  }
+};
+
+// Reassign an existing assignment to a different driver/cab while preserving trip/customer fields
+const reassignTrip = async (req, res) => {
+  try {
+    const adminId = req.admin.id;
+    const adminRole = req.admin.role;
+    const assignmentId = req.params.id;
+    const { driverId, cabNumber } = req.body;
+
+    if (!assignmentId || !driverId || !cabNumber) {
+      return res.status(400).json({ message: "assignmentId (param), driverId and cabNumber are required" });
+    }
+
+    const assignment = await CabAssignment.findByPk(assignmentId);
+    if (!assignment) return res.status(404).json({ message: "Cab assignment not found" });
+
+    if (assignment.assignedBy !== adminId && adminRole !== "superadmin") {
+      return res.status(403).json({ message: "Unauthorized: You can only modify cabs assigned by you" });
+    }
+
+    // Coerce and validate IDs
+    const driverIdNum = Number(driverId);
+    if (!Number.isInteger(driverIdNum)) {
+      return res.status(400).json({ message: "Invalid driverId" });
+    }
+
+    // Resolve cab by numeric id or by cabNumber string
+    let cab = null;
+    const maybeNum = Number(cabNumber);
+    if (Number.isInteger(maybeNum)) {
+      cab = await CabsDetails.findByPk(maybeNum);
+    }
+    if (!cab) {
+      cab = await CabsDetails.findOne({ where: { cabNumber } });
+    }
+    if (!cab) return res.status(404).json({ message: "Cab not found for given cabNumber/id" });
+
+    assignment.driverId = driverIdNum;
+    assignment.cabId = cab.id;
+    assignment.status = 'reassigned';
+    await assignment.save();
+
+    // Return with associations for UI
+    const updated = await CabAssignment.findByPk(assignment.id, {
+      include: [
+        { model: Driver },
+        { model: CabsDetails },
+      ]
+    });
+
+    return res.status(200).json({ message: "Trip reassigned successfully", assignment: updated });
+  } catch (error) {
+    console.error("Error in reassignTrip:", error);
+    return res.status(500).json({ message: "Server Error", error: error.message, stack: process.env.NODE_ENV !== 'production' ? error.stack : undefined });
+  }
+};
+
 const completeTripByAdmin = async (req, res) => {
   try {
     if (!["superadmin", "subadmin", "Admin"].includes(req.admin.role)) {
@@ -1352,16 +1494,12 @@ const completeTripByAdmin = async (req, res) => {
 
 //     await CabAssignment.findByIdAndDelete(req.params.id);
 //     res.status(200).json({ message: "Cab unassigned successfully" });
-//   } catch (error) {
-//     res.status(500).json({ message: "Server Error", error: error.message });
-//   }
-// };
-
 const unassignCab = async (req, res) => {
   try {
     const adminId = req.admin.id;
     const adminRole = req.admin.role;
-    const assignmentId = req.params.id;
+    const assignmentId = req.params.id || req.body.id;
+    const action = (req.query.action || req.body.action || '').toLowerCase();
 
     // Step 1: Find the cab assignment
     const cabAssignment = await CabAssignment.findByPk(assignmentId);
@@ -1371,17 +1509,22 @@ const unassignCab = async (req, res) => {
     }
 
     // Step 2: Check authorization
-    if (cabAssignment.assignedBy !== adminId && adminRole !== "super-admin") {
+    if (cabAssignment.assignedBy !== adminId && adminRole !== "superadmin") {
       return res
         .status(403)
         .json({
-          message: "Unauthorized: You can only unassign cabs assigned by you",
+          message: "Unauthorized: You can only modify cabs assigned by you",
         });
     }
 
-    // Step 3: Delete the assignment
-    await CabAssignment.destroy({ where: { id: assignmentId } });
+    // Step 3: If cancel action, mark as cancelled; otherwise delete (unassign)
+    if (action === 'cancel') {
+      cabAssignment.status = 'cancelled';
+      await cabAssignment.save();
+      return res.status(200).json({ message: "Trip cancelled successfully", assignment: cabAssignment });
+    }
 
+    await CabAssignment.destroy({ where: { id: assignmentId } });
     res.status(200).json({ message: "Cab unassigned successfully" });
   } catch (error) {
     console.error("Error in unassignCab:", error);
@@ -1508,4 +1651,7 @@ module.exports = {
   getMyCashSummary,
   exportCabExpenses,
   getAdminCabs,
+  reassignTrip,
+  updateAssignmentDetails,
+  deleteAssignment,
 };

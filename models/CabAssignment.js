@@ -115,7 +115,7 @@ module.exports = (sequelize) => {
         defaultValue: DataTypes.NOW,
       },
       status: {
-        type: DataTypes.ENUM("assigned", "ongoing", "completed"),
+        type: DataTypes.ENUM("assigned", "ongoing", "completed", "cancelled", "reassigned"),
         defaultValue: "assigned",
       },
       assignedBy: {

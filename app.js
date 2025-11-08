@@ -42,7 +42,19 @@ const PORT = process.env.PORT || 5000;
 app.use(cors({
   origin: "*",
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "Cache-Control",
+    "If-None-Match",
+    "If-Modified-Since",
+    "Pragma"
+  ],
+  exposedHeaders: [
+    "ETag",
+    "Last-Modified",
+    "Cache-Control"
+  ],
 }));
 app.use(logger("dev"));
 app.use(cookieParser());

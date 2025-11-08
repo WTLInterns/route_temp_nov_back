@@ -3,6 +3,7 @@ const express = require("express");
 const {Driver} = require("../models/");
 const { authMiddleware, isAdmin } = require("../middleware/authMiddleware");
 const cloudinary = require("../config/cloudinary");
+const uploadFields = require ("../middleware/uploadFields");
 
 const router = express.Router();
 
@@ -23,7 +24,7 @@ router.get("/profile", authMiddleware, isAdmin, async (req, res) => {       // D
 });
 
 //  Update Driver Profile (Only Owner Admin or Super Admin)
-router.put("/profile/:id", authMiddleware, async (req, res) => {    // DONE
+router.put("/profile/:id", authMiddleware, uploadFields, async (req, res) => {    // DONE
   try {
     const adminId = req.admin.id;
     const adminRole = req.admin.role;
@@ -42,8 +43,18 @@ router.put("/profile/:id", authMiddleware, async (req, res) => {    // DONE
       });
     }
 
+    // Merge body updates with any uploaded file paths
+    const updates = { ...req.body };
+    const uploadedProfile = req.files?.profileImage?.[0]?.path;
+    const uploadedLicense = req.files?.licenseNoImage?.[0]?.path;
+    const uploadedAdhar = req.files?.adharNoImage?.[0]?.path;
+
+    if (uploadedProfile) updates.profileImage = uploadedProfile;
+    if (uploadedLicense) updates.licenseNoImage = uploadedLicense;
+    if (uploadedAdhar) updates.adharNoImage = uploadedAdhar;
+
     // Update the driver
-    await driver.update(req.body); // this updates the record
+    await driver.update(updates); // this updates the record
 
     // Don't include password in the response
     const { password, ...driverData } = driver.get({ plain: true });

@@ -2,7 +2,7 @@
 module.exports = {
   development: {
     username: 'postgres',
-    password: 'SaurabhS2151',
+    password: 'root',
     database: 'Route-Budget',
     host: 'localhost',
     port: 5432,

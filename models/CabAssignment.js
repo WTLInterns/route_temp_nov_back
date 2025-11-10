@@ -244,6 +244,16 @@ module.exports = (sequelize) => {
         type: DataTypes.TEXT,
       },
 
+      // Optional extra stops
+      optionalPickupLocations: {
+        type: DataTypes.ARRAY(DataTypes.STRING),
+        defaultValue: [],
+      },
+      optionalDropLocations: {
+        type: DataTypes.ARRAY(DataTypes.STRING),
+        defaultValue: [],
+      },
+
 
     },
     {

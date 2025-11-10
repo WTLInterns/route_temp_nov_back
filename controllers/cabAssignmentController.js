@@ -615,7 +615,7 @@ const updateTripDetailsByDriver = async (req, res) => {
     // ----------------- GEOCODE IF NEEDED -----------------
     // If pickup/drop locations changed but no coordinates provided, geocode them
     const axios = require('axios');
-    const GOOGLE_MAPS_API_KEY = 'AIzaSyDOQbXxE0_8dPZGWzlqhNPZQGjwTGXlxQA'; // Use your key
+    const GOOGLE_MAPS_API_KEY = 'AIzaSyAKjmBSUJ3XR8uD10vG2ptzqLJAZnOlzqI'; // Use your key
     
     let finalPickupLat = updatedPickupLatitude;
     let finalPickupLng = updatedPickupLongitude;
@@ -926,6 +926,8 @@ const assignCab = async (req, res) => {
       customerPhone,
       pickupLocation,
       dropLocation,
+      optionalPickupLocations,
+      optionalDropLocations,
       tripType,
       vehicleType,
       duration,
@@ -998,6 +1000,8 @@ const assignCab = async (req, res) => {
       customerPhone,
       pickupLocation,
       dropLocation,
+      optionalPickupLocations: Array.isArray(optionalPickupLocations) ? optionalPickupLocations : [],
+      optionalDropLocations: Array.isArray(optionalDropLocations) ? optionalDropLocations : [],
       tripType,
       vehicleType,
       duration,
@@ -1311,11 +1315,10 @@ const completeTrip = async (req, res) => {
     });
   } catch (err) {
     console.error('completeTrip error', err)
-    res.status(500).json({ message: "Server Error", error: err.message });
+    return res.status(500).json({ message: "Server Error", error: err.message });
   }
 };
 
-// Update booking details (customer, pickup/drop, timing, fares, etc.). Optionally allow driver/cab change if provided.
 const updateAssignmentDetails = async (req, res) => {
   try {
     const admin = req.admin;
@@ -1334,13 +1337,81 @@ const updateAssignmentDetails = async (req, res) => {
       'customerName','customerPhone','pickupLocation','pickupCity','pickupState','pickupLatitude','pickupLongitude',
       'dropLocation','dropCity','dropState','dropLatitude','dropLongitude','estimatedDistance','estimatedFare','duration',
       'scheduledPickupTime','vehicleType','tripType','specialInstructions','paymentMode','adminNotes','totalDistance',
-      'actualPickupTime','dropTime','cashCollected','fastTagAmount','otherAmount','otherDetails'
+      'actualPickupTime','dropTime','cashCollected','fastTagAmount','otherAmount','otherDetails',
+      'optionalPickupLocations','optionalDropLocations'
     ];
 
+    // Normalize types for optional arrays
+    const toStringArray = (val) => {
+      if (val === null || val === undefined) return undefined
+      if (Array.isArray(val)) return val.map(v => String(v).trim()).filter(Boolean)
+      if (typeof val === 'string') return val.split(',').map(s => s.trim()).filter(Boolean)
+      return [String(val)].filter(Boolean)
+    }
+
+    // Helpers to sanitize incoming values
+    const parseNumOrNull = (v) => {
+      if (v === undefined || v === null || v === '') return null;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    };
+    const parseDateOrNull = (v) => {
+      if (!v || v === '') return null;
+      const d = new Date(v);
+      return isNaN(d.getTime()) ? null : d;
+    };
+    const normalizeMode = (m) => {
+      if (m === undefined || m === null || m === '') return null;
+      const s = String(m).trim().toLowerCase();
+      if (!s) return null;
+      const map = {
+        cash: 'Cash',
+        card: 'Card',
+        online: 'Online',
+        upi: 'Online',
+        wallet: 'Online'
+      };
+      return map[s] || (s.charAt(0).toUpperCase() + s.slice(1));
+    };
+
     for (const key of updatable) {
-      if (Object.prototype.hasOwnProperty.call(body, key)) {
-        assignment[key] = body[key];
+      if (!Object.prototype.hasOwnProperty.call(body, key)) continue;
+
+      // Arrays of strings
+      if (key === 'optionalPickupLocations' || key === 'optionalDropLocations') {
+        const arr = toStringArray(body[key]);
+        if (arr !== undefined) assignment[key] = arr;
+        continue;
       }
+
+      // Numeric fields
+      if (['estimatedFare','duration','estimatedDistance','cashCollected','totalDistance','dropLatitude','dropLongitude','pickupLatitude','pickupLongitude'].includes(key)) {
+        const num = parseNumOrNull(body[key]);
+        if (num === null) {
+          // Set null to avoid writing "" to numeric columns
+          assignment[key] = null;
+        } else {
+          assignment[key] = num;
+        }
+        continue;
+      }
+
+      // Date/time fields
+      if (['scheduledPickupTime','actualPickupTime','dropTime'].includes(key)) {
+        const dt = parseDateOrNull(body[key]);
+        assignment[key] = dt; // can be null
+        continue;
+      }
+
+      // Enum-like fields
+      if (key === 'paymentMode') {
+        const mode = normalizeMode(body[key]);
+        assignment[key] = mode; // can be null
+        continue;
+      }
+
+      // Default: assign as-is
+      assignment[key] = body[key];
     }
 
     // Optionally allow driver/cab change here too (not required – reassign endpoint preferred)

@@ -2,7 +2,7 @@ const axios = require('axios');
 const { CabAssignment } = require('../models');
 const { Op } = require('sequelize');
 
-const GOOGLE_MAPS_API_KEY = 'AIzaSyDOQbXxE0_8dPZGWzlqhNPZQGjwTGXlxQA';
+const GOOGLE_MAPS_API_KEY = 'AIzaSyAKjmBSUJ3XR8uD10vG2ptzqLJAZnOlzqI';
 
 async function geocodeExistingTrips() {
   try {

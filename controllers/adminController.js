@@ -23,6 +23,12 @@ const transporter = nodemailer.createTransport({
 const addNewSubAdmin = async (req, res) => {
   try {
     const { name, email, role, phone, status, companyInfo } = req.body;
+    // Optional package limit from master admin UI
+    let { subscriptionCabLimit } = req.body;
+    if (subscriptionCabLimit !== undefined) {
+      const n = Number(subscriptionCabLimit);
+      subscriptionCabLimit = Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
+    }
     console.log("response", req.body);
 
     const profileImage = req.files?.profileImage?.[0]?.path || null;
@@ -64,6 +70,8 @@ const addNewSubAdmin = async (req, res) => {
       companyLogo,
       companyInfo,
       signature,
+      // Save selected package size if provided
+      ...(subscriptionCabLimit !== undefined ? { subscriptionCabLimit } : {}),
     });
 
     // Optionally generate invoice number (if needed for display or testing)
@@ -260,7 +268,7 @@ const totalCab = async (req, res) => {
 //           startDate: subAdmin.subscriptionStart,
 //           endDate: subAdmin.subscriptionEnd,
 //           daysLeft,
-//           status,  // 👈 added status
+//           status,  // 
 //           price: subAdmin.subscriptionPrice,
 //         };
 //       }
@@ -318,7 +326,7 @@ const getAllSubAdmins = async (req, res) => {
             startDate: subAdmin.subscriptionStart,
             endDate: subAdmin.subscriptionEnd,
             daysLeft,
-            status,  // 👈 added status
+            status,  // 
             price: subAdmin.subscriptionPrice,
           };
         }
@@ -356,7 +364,7 @@ const getAllSubAdmins = async (req, res) => {
         return {
           ...subAdmin.toJSON(),
           subscription,
-          cabStats  // 👈 ADDED cab statistics
+          cabStats  // 
         };
       })
     );
@@ -502,7 +510,7 @@ const getSubAdminById = async (req, res) => {
   try {
     const cacheKey = `sub:${req.params.id}`;
 
-    // 🔹 Serve from micro-cache if present
+    // Serve from micro-cache if present
     try {
       const cached = mcGet(cacheKey);
       if (cached && req.headers['cache-control'] !== 'no-cache') {
@@ -526,7 +534,7 @@ const getSubAdminById = async (req, res) => {
       }
     } catch (_) {}
 
-    // 🔹 Fetch sub-admin by ID with their notifications
+    // Fetch sub-admin by ID with their notifications
     const subAdmin = await Admin.findByPk(req.params.id, {
       attributes: { exclude: ['password'] },
       include: [
@@ -542,7 +550,7 @@ const getSubAdminById = async (req, res) => {
       return res.status(404).json({ success: false, message: "Sub-admin not found" });
     }
 
-    // 🔹 Subscription calculation
+    // Subscription calculation
     let subscription = null;
     if (subAdmin.subscriptionType) {
       const today = new Date();
@@ -560,7 +568,7 @@ const getSubAdminById = async (req, res) => {
       };
     }
 
-    // 🔹 Lightweight caching for faster repeat hits
+    // Lightweight caching for faster repeat hits
     try {
       const lastMod = subAdmin.updatedAt ? new Date(subAdmin.updatedAt) : new Date();
       const cacheControl = 'private, max-age=5, stale-while-revalidate=30';
@@ -619,6 +627,8 @@ const updateSubAdmin = async (req, res) => {
       companyInfo,
       companyLogo,
       signature,
+      // Optional package size update
+      subscriptionCabLimit,
     } = req.body;
 
     console.log("Updating subadmin with ID:", subAdminId);
@@ -654,8 +664,13 @@ const updateSubAdmin = async (req, res) => {
     if (companyInfo) updateData.companyInfo = companyInfo;
     if (companyLogo) updateData.companyLogo = companyLogo;
     if (signature) updateData.signature = signature;
+    // Handle package size if provided
+    if (subscriptionCabLimit !== undefined) {
+      const n = Number(subscriptionCabLimit);
+      updateData.subscriptionCabLimit = Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
+    }
 
-    // ✅ Handle multipart uploads via uploadFields middleware
+    // Handle multipart uploads via uploadFields middleware
     // Prefer newly uploaded files over body values if present
     const uploadedProfile = req.files?.profileImage?.[0]?.path;
     const uploadedLogo = req.files?.companyLogo?.[0]?.path;

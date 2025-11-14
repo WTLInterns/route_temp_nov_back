@@ -127,7 +127,7 @@ router.patch("/add", authMiddleware, isAdmin, upload, async (req, res) => {
     // ✅ Limit check
     if (currentCabCount >= admin.subscriptionCabLimit) {
       return res.status(403).json({
-        message: `Cab limit (${admin.subscriptionCabLimit}) reached. Please upgrade your plan to add more cabs.`,
+        message: "You exceeded your limit. Please contact support.",
       });
     }
 

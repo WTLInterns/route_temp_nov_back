@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { assignCab, getAssignCab, unassignCab,getAssignDriver,EditDriverProfile, completeTrip,assignTripToDriver,getDriverAssignedCabs,updateTripDetailsByDriver,driverAssignCab ,freeCabDriver,getFreeCabsForDriver,completeTripByAdmin, getAdminCashSummary, getDriverCashSummary, getMyCashSummary, exportCabExpenses, getAdminCabs } = require('../controllers/cabAssignmentController')
+const { assignCab, getAssignCab, unassignCab,getAssignDriver,EditDriverProfile, completeTrip,assignTripToDriver,getDriverAssignedCabs,updateTripDetailsByDriver,driverAssignCab ,freeCabDriver,getFreeCabsForDriver,completeTripByAdmin, getAdminCashSummary, getDriverCashSummary, getMyCashSummary, exportCabExpenses, getAdminCabs, submitDriverCash } = require('../controllers/cabAssignmentController')
 const { reassignTrip, updateAssignmentDetails, deleteAssignment } = require('../controllers/cabAssignmentController')
 const { getCompletedTripsByDriver, getMyCompletedTrips } = require('../controllers/driverTripsController')
 const { authMiddleware, isAdmin } = require("../middleware/authMiddleware");
@@ -46,10 +46,11 @@ router.get('/freeCabsAndDrivers',authMiddleware,freeCabDriver )
 
 router.get('/driver/free-cabs', driverAuthMiddleware, getFreeCabsForDriver);
 
-// Cash summaries
+// Cash summaries and submissions
 router.get('/cash/summary', authMiddleware, isAdmin, getAdminCashSummary)
 router.get('/cash/driver/:driverId', authMiddleware, isAdmin, getDriverCashSummary)
 router.get('/cash/me', driverAuthMiddleware, getMyCashSummary)
+router.post('/cash/submit', authMiddleware, isAdmin, submitDriverCash)
 
 // Export per-cab expenses CSV
 router.get('/cabs/:cabId/expenses/export', authMiddleware, isAdmin, exportCabExpenses)

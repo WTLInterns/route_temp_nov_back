@@ -1145,6 +1145,57 @@ async function computeDriverCashOnHand(adminId, driverId) {
   return { cashCollected, cashExpenses, cashOnHand: cashCollected - cashExpenses }
 }
 
+// Record an admin-side cash submission from a driver and return the updated cash summary
+const submitDriverCash = async (req, res) => {
+  try {
+    const adminId = req.admin?.id
+    const { driverId, amount } = req.body || {}
+
+    const driverIdNum = Number(driverId)
+    const amountNum = Number(amount)
+
+    if (!adminId) {
+      return res.status(401).json({ message: "Unauthorized: admin token required" })
+    }
+    if (!Number.isInteger(driverIdNum) || driverIdNum <= 0) {
+      return res.status(400).json({ message: "Invalid driverId" })
+    }
+    if (!Number.isFinite(amountNum) || amountNum <= 0) {
+      return res.status(400).json({ message: "Invalid amount" })
+    }
+
+    // Find a recent assignment for this driver under this admin to attach cabId
+    const latestAssignment = await CabAssignment.findOne({
+      where: {
+        driverId: driverIdNum,
+        assignedBy: adminId,
+      },
+      order: [["createdAt", "DESC"]],
+    })
+
+    if (!latestAssignment || !latestAssignment.cabId) {
+      return res.status(400).json({ message: "No cab assignment found to record cash submission" })
+    }
+
+    // Create a synthetic adjustment trip representing cash handed over to admin
+    await CabAssignment.create({
+      driverId: driverIdNum,
+      cabId: latestAssignment.cabId,
+      assignedBy: adminId,
+      paymentMode: "Cash",
+      cashCollected: -Math.abs(amountNum),
+      pickupLocation: "Cash submission",
+      dropLocation: "Admin office",
+    })
+
+    const summary = await computeDriverCashOnHand(adminId, driverIdNum)
+    return res.status(200).json(summary)
+  } catch (err) {
+    console.error("submitDriverCash error", err)
+    return res.status(500).json({ message: "Server Error", error: err.message })
+  }
+}
+
 // Admin-wide summary: total cash received from all drivers (cash trips) and current cash in drivers' hands
 const getAdminCashSummary = async (req, res) => {
   try {
@@ -1725,4 +1776,5 @@ module.exports = {
   reassignTrip,
   updateAssignmentDetails,
   deleteAssignment,
+  submitDriverCash,
 };

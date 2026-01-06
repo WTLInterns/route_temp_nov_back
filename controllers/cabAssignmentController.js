@@ -2,7 +2,7 @@
 // const Driver = require('../models');
 // const Cab = require('../models');
 
-const { Driver, CabAssignment, CabsDetails,Admin } = require("../models");
+const { Driver, CabAssignment, CabsDetails, Admin, DriverCashAdjustment } = require("../models");
 const mongoose = require("mongoose");
 const { Op } = require("sequelize");
 
@@ -1128,7 +1128,10 @@ function normalizeMode(mode) {
 async function computeDriverCashOnHand(adminId, driverId) {
   const where = { driverId }
   if (adminId) where.assignedBy = adminId
+
+  // All cab trips for this driver (optionally under a specific admin)
   const trips = await CabAssignment.findAll({ where })
+
   let cashCollected = 0
   let cashExpenses = 0
   for (const t of trips) {
@@ -1142,7 +1145,16 @@ async function computeDriverCashOnHand(adminId, driverId) {
     cashExpenses += sumArraySafe(t.servicingAmount)
     cashExpenses += sumArraySafe(t.otherAmount)
   }
-  return { cashCollected, cashExpenses, cashOnHand: cashCollected - cashExpenses }
+
+  // Separate cash adjustments: positive amount = driver handed cash to admin
+  const adjWhere = adminId ? { driverId, adminId } : { driverId }
+  const adjustments = await DriverCashAdjustment.findAll({ where: adjWhere })
+  const totalAdjustments = adjustments.reduce((sum, a) => sum + (Number(a.amount) || 0), 0)
+
+  // Driver's cash on hand = trips cash - expenses - cash already submitted to admin
+  const cashOnHand = cashCollected - cashExpenses - totalAdjustments
+
+  return { cashCollected, cashExpenses, cashOnHand }
 }
 
 // Record an admin-side cash submission from a driver and return the updated cash summary
@@ -1164,28 +1176,12 @@ const submitDriverCash = async (req, res) => {
       return res.status(400).json({ message: "Invalid amount" })
     }
 
-    // Find a recent assignment for this driver under this admin to attach cabId
-    const latestAssignment = await CabAssignment.findOne({
-      where: {
-        driverId: driverIdNum,
-        assignedBy: adminId,
-      },
-      order: [["createdAt", "DESC"]],
-    })
-
-    if (!latestAssignment || !latestAssignment.cabId) {
-      return res.status(400).json({ message: "No cab assignment found to record cash submission" })
-    }
-
-    // Create a synthetic adjustment trip representing cash handed over to admin
-    await CabAssignment.create({
+    // Record a cash adjustment instead of creating a fake CabAssignment row
+    await DriverCashAdjustment.create({
       driverId: driverIdNum,
-      cabId: latestAssignment.cabId,
-      assignedBy: adminId,
-      paymentMode: "Cash",
-      cashCollected: -Math.abs(amountNum),
-      pickupLocation: "Cash submission",
-      dropLocation: "Admin office",
+      adminId,
+      amount: Math.abs(amountNum), // positive = driver paid admin
+      note: "Cash submission from admin panel",
     })
 
     const summary = await computeDriverCashOnHand(adminId, driverIdNum)

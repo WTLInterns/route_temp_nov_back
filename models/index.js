@@ -7,6 +7,7 @@
 // const CabAssignmentModel = require('./CabAssignment');
 // const CabModel = require('./Cab');
 // const ServicingAssignmentModel = require('./ServicingAssignment');
+const DriverCashAdjustmentModel = require('./DriverCashAdjustment');
 
 // const sequelize = new Sequelize('Car-Expengo', 'postgres', 'root', {
 //   host: 'localhost',
@@ -110,6 +111,7 @@ const CabsDetails = CabsDetailsModel(sequelize, DataTypes);
 const CabAssignment = CabAssignmentModel(sequelize, DataTypes);
 const Cab = CabModel(sequelize, DataTypes);
 const ServicingAssignment = ServicingAssignmentModel(sequelize, DataTypes);
+const DriverCashAdjustment = DriverCashAdjustmentModel(sequelize, DataTypes);
 const Analytics = AnalyticsModel(sequelize, DataTypes);
 const Expense = ExpenseModel(sequelize, DataTypes);
 const SubAdminPermissions = SubAdminPermissionsModel(sequelize, DataTypes);
@@ -219,7 +221,6 @@ SalaryDeduction.belongsTo(Driver, { foreignKey: 'driverId' });
 Admin.hasMany(SalaryDeduction, { foreignKey: 'subAdminId' });
 SalaryDeduction.belongsTo(Admin, { foreignKey: 'subAdminId' });
 
-
 // Sync DB
 sequelize
   .sync({ alter: true })
@@ -252,4 +253,5 @@ module.exports = {
   Attendance,
   DriverSalary,
   SalaryDeduction,
+  DriverCashAdjustment,
 };

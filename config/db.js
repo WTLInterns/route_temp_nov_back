@@ -6,7 +6,7 @@ require('dotenv').config();
 const sequelize = new Sequelize(
   'Route-Budget',    // DB name fallback
   'postgres',       // Username fallback
-  'SaurabhS2151',          // Password fallback
+  'root',          // Password fallback
   {
     host: 'localhost',
     port: 5432,

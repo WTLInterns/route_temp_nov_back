@@ -72,7 +72,7 @@ const DriverCashAdjustmentModel = require('./DriverCashAdjustment');
 const { Sequelize, DataTypes } = require('sequelize');
 
 // Sequelize instance
-const sequelize = new Sequelize('Route-Budget', 'postgres', 'SaurabhS2151', {
+const sequelize = new Sequelize('Route-Budget', 'postgres', 'root', {
   host: 'localhost',
   dialect: 'postgres',
   logging: false,
